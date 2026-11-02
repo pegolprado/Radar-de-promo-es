@@ -97,7 +97,7 @@ function carregarProjeto(ss, { arquivos, props = {}, telegram } = {}) {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in propriedades ? propriedades[k] : null), setProperty: (k, v) => { propriedades[k] = String(v); } }) },
     UrlFetchApp: {
       fetch: (url, opcoes) => {
-        chamadas.push({ url, opcoes, corpo: opcoes && opcoes.payload ? JSON.parse(opcoes.payload) : null });
+        chamadas.push({ url, opcoes, corpo: opcoes && typeof opcoes.payload === 'string' ? JSON.parse(opcoes.payload) : (opcoes && opcoes.payload) || null });
         const r = telegram ? telegram(url, opcoes) : { codigo: 200, corpo: { ok: true, result: { message_id: chamadas.length } } };
         if (r.excecao) throw new Error(r.excecao);
         return { getResponseCode: () => r.codigo, getContentText: () => (r.corpoTexto !== undefined ? r.corpoTexto : JSON.stringify(r.corpo)) };

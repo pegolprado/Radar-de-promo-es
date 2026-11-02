@@ -11,6 +11,10 @@ function onOpen() {
     .addSeparator()
     .addItem('🧪 Inserir oferta de demonstração', 'menuOfertaDemonstracao')
     .addItem('🩺 Diagnosticar fontes', 'diagnosticarFontes')
+    .addSeparator()
+    .addItem('🔗 Conectar Mercado Livre', 'conectarMercadoLivre')
+    .addItem('🩺 Diagnosticar Mercado Livre', 'diagnosticarMercadoLivre')
+    .addSeparator()
     .addItem('🧱 Criar/verificar estrutura', 'criarEstrutura')
     .addToUi();
 }
