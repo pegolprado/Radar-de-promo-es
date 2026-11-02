@@ -5,7 +5,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-function criarPlanilhaFalsa() {
+function criarPlanilhaFalsa(sep = ',') {
   const abas = [];
   function novaAba(nome) {
     const celulas = {}; // "l,c" -> valor
@@ -31,7 +31,16 @@ function criarPlanilhaFalsa() {
             return r;
           },
           setValue(x) { celulas[`${l},${c}`] = x; return r; },
-          setFormula(f) { assert.ok(f.startsWith('='), 'fórmula sem ='); aba.formulas[`${l},${c}`] = f; celulas[`${l},${c}`] = f; return r; },
+          setFormula(f) {
+            assert.ok(f.startsWith('='), 'fórmula sem =');
+            // Simula a planilha real: fórmula com separador errado vira #ERROR!
+            const semAspas = f.replace(/"[^"]*"/g, '');
+            const errado = sep === ';' ? semAspas.includes(',') : semAspas.includes(';');
+            const valor = errado ? '#ERROR!' : (/^=SUM\(1.2\)$/.test(f) ? 3 : f);
+            aba.formulas[`${l},${c}`] = f; celulas[`${l},${c}`] = valor; return r;
+          },
+          getValue() { const v = celulas[`${l},${c}`]; return v == null ? '' : v; },
+          clearContent() { delete celulas[`${l},${c}`]; delete aba.formulas[`${l},${c}`]; return r; },
           getValues() { const out = []; for (let i = 0; i < nl; i++) { const linha = []; for (let j = 0; j < nc; j++) { const v = celulas[`${l + i},${c + j}`]; linha.push(v == null ? '' : v); } out.push(linha); } return out; },
           setNote(t) { aba.notas[`${l},${c}`] = t; return r; },
           setDataValidation(v) { aba.validacoes[`${c}`] = v; return r; },
@@ -59,7 +68,7 @@ function carregar(ss) {
   const validacao = () => { const b = { requireCheckbox: () => b, requireValueInList: (l) => { b.lista = l; return b; }, setAllowInvalid: () => b, build: () => b }; return b; };
   const ctx = {
     console: { log: () => {} },
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss, newDataValidation: validacao, getUi: () => { throw new Error('sem UI'); } },
+    SpreadsheetApp: { flush: () => {}, getActiveSpreadsheet: () => ss, newDataValidation: validacao, getUi: () => { throw new Error('sem UI'); } },
   };
   vm.createContext(ctx);
   const codigo = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Setup.gs'), 'utf8');
@@ -151,6 +160,25 @@ teste('chave de configuração apagada é recriada, as outras ficam', () => {
   R.criarEstrutura();
   assert.strictEqual(c.getLastRow(), total);
   assert.strictEqual(c.getRange(3, 2).getValues()[0][0], 'NAO');
+});
+
+teste('nenhuma fórmula do painel dá #ERROR! em planilha com vírgula', () => {
+  const p = ss.getSheetByName('PAINEL');
+  assert.ok(!Object.values(p.celulas).includes('#ERROR!'));
+  assert.ok(!Object.keys(p.celulas).some(k => k.endsWith(',26')), 'célula de teste (Z1) deve ser limpa');
+});
+
+teste('planilha em português (separador ;) também funciona, sem #ERROR!', () => {
+  const ssBR = criarPlanilhaFalsa(';');
+  const RB = carregar(ssBR);
+  RB.criarEstrutura();
+  const p = ssBR.getSheetByName('PAINEL');
+  assert.ok(!Object.values(p.celulas).includes('#ERROR!'), JSON.stringify(Object.values(p.formulas)));
+  const f = Object.values(p.formulas).find(x => x.includes("'EXCELENTE'"));
+  assert.ok(f.includes('"select Col2, Col6'), 'vírgulas dentro da consulta não podem mudar: ' + f);
+  assert.ok(f.endsWith(';1);"Nenhuma oferta excelente ainda")'), f);
+  const ativos = Object.values(p.formulas).find(x => x.startsWith('=COUNTIF(PRODUTOS'));
+  assert.strictEqual(ativos, '=COUNTIF(PRODUTOS!B2:B;(1=1))');
 });
 
 console.log(`\n${ok} testes passaram.`);

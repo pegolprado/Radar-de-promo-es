@@ -407,6 +407,38 @@ function removerAbaPadraoVazia_(ss) {
   });
 }
 
+/* ============================== FÓRMULAS E IDIOMA ============================== */
+
+/**
+ * Descobre o separador de argumentos que ESTA planilha aceita.
+ * Planilhas em português (Brasil) usam ";" e em inglês usam ",".
+ * Faz um teste real numa célula temporária em vez de supor.
+ */
+function separadorFormulas_(aba) {
+  const celula = aba.getRange(1, 26); // coluna Z, só durante o teste
+  const candidatos = [',', ';'];
+  for (let i = 0; i < candidatos.length; i++) {
+    celula.setFormula('=SUM(1' + candidatos[i] + '2)');
+    SpreadsheetApp.flush();
+    const v = celula.getValue();
+    if (v === 3) { celula.clearContent(); return candidatos[i]; }
+  }
+  celula.clearContent();
+  throw new Error('Não consegui descobrir o separador de fórmulas desta planilha. Verifique Arquivo > Configurações > Localidade.');
+}
+
+/** Troca as vírgulas que separam argumentos pelo separador da planilha, sem mexer no que está entre aspas. */
+function adaptarFormula_(formula, sep) {
+  if (sep === ',') return formula;
+  let saida = '', dentroAspas = false;
+  for (let i = 0; i < formula.length; i++) {
+    const ch = formula.charAt(i);
+    if (ch === '"') dentroAspas = !dentroAspas;
+    saida += (ch === ',' && !dentroAspas) ? sep : ch;
+  }
+  return saida;
+}
+
 /* ============================== PAINEL ============================== */
 
 /** Letra da coluna (A, B, ... AA) de um cabeçalho de uma aba do esquema. */
@@ -450,10 +482,11 @@ function montarPainel_(ss) {
   aba.getRange(2, 1).setValue('Atualizado em:').setFontColor('#5f6368');
   aba.getRange(2, 2).setFormula('=NOW()').setNumberFormat(RADAR_FORMATO_DATA).setFontColor('#5f6368');
 
+  const SEP = separadorFormulas_(aba);
   const O = 'OFERTAS', N = 'NOTIFICACOES', L = 'LOGS', F = 'FONTES', P = 'PRODUTOS', J = 'LOJAS';
   const indicadores = [
-    ['Produtos ativos', '=COUNTIF(' + col_(P, 'Ativo') + ',TRUE)'],
-    ['Lojas ativas', '=COUNTIF(' + col_(J, 'Ativa') + ',TRUE)'],
+    ['Produtos ativos', '=COUNTIF(' + col_(P, 'Ativo') + ',(1=1))'],
+    ['Lojas ativas', '=COUNTIF(' + col_(J, 'Ativa') + ',(1=1))'],
     ['Fontes funcionando (OK)', '=COUNTIF(' + col_(F, 'Status') + ',"OK")'],
     ['Fontes com problema', '=COUNTIF(' + col_(F, 'Status') + ',"FALHANDO")+COUNTIF(' + col_(F, 'Status') + ',"INDISPONÍVEL")'],
     ['Ofertas EXCELENTES (7 dias)', '=COUNTIFS(' + col_(O, 'Classificação') + ',"EXCELENTE",' + col_(O, 'Data/hora') + ',">="&(NOW()-7))'],
@@ -466,7 +499,7 @@ function montarPainel_(ss) {
   aba.getRange(4, 1).setValue('INDICADORES').setFontWeight('bold').setBackground('#e8f0fe');
   indicadores.forEach(function (ind, i) {
     aba.getRange(5 + i, 1).setValue(ind[0]);
-    aba.getRange(5 + i, 2).setFormula(ind[1]).setFontWeight('bold').setHorizontalAlignment('center');
+    aba.getRange(5 + i, 2).setFormula(adaptarFormula_(ind[1], SEP)).setFontWeight('bold').setHorizontalAlignment('center');
   });
 
   // Seções com tabelas (QUERY). Cada uma tem espaço reservado para não sobrepor a seguinte.
@@ -508,7 +541,7 @@ function montarPainel_(ss) {
     if (s.ordem) q += ' order by ' + s.ordem;
     q += ' limit ' + s.limite;
     const formula = '=IFERROR(QUERY(' + intervaloAba_(s.aba) + ',"' + q.replace(/"/g, '""') + '",1),"' + s.vazio + '")';
-    aba.getRange(linha + 1, 1).setFormula(formula);
+    aba.getRange(linha + 1, 1).setFormula(adaptarFormula_(formula, SEP));
     aba.getRange(linha + 1, 1, 1, s.cols.length).setFontWeight('bold').setBackground('#f1f3f4');
     s.cols.forEach(function (nomeCol, i) {
       const def = RADAR_ESQUEMA[s.aba].colunas.filter(function (c) { return c.nome === nomeCol; })[0];
