@@ -11,6 +11,7 @@
  */
 
 const RADAR_VERSAO_ESQUEMA = '1.0';
+const RADAR_VERSAO_SETUP = '3'; // aparece no registro para confirmar qual versão do código rodou
 const RADAR_FUSO = 'America/Sao_Paulo';
 const RADAR_LINHAS_VALIDACAO = 1000; // até quantas linhas aplicar caixas de seleção e listas
 
@@ -288,7 +289,7 @@ function criarEstrutura() {
   relatorio.push(montarPainel_(ss));
   removerAbaPadraoVazia_(ss);
 
-  const texto = 'RADAR — estrutura verificada:\n• ' + relatorio.join('\n• ');
+  const texto = 'RADAR — estrutura verificada (Setup versão ' + RADAR_VERSAO_SETUP + '):\n• ' + relatorio.join('\n• ');
   console.log(texto);
   try { SpreadsheetApp.getUi().alert(texto); } catch (e) { /* executado pelo editor: veja o Registro de execução */ }
   return texto;
