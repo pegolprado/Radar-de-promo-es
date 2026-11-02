@@ -12,8 +12,8 @@ Roda de graça com **Google Sheets + Google Apps Script + Telegram Bot API**.
 | 1 | [Arquitetura e fontes de dados](docs/ETAPA-1-ARQUITETURA.md) | ✅ Aprovada |
 | 2 | [Bot do Telegram](docs/ETAPA-2-TELEGRAM-BOT.md) | ✅ Teste de envio OK |
 | 3 | [Planilha (Google Sheets)](docs/ETAPA-3-PLANILHA.md) | ✅ Validada |
-| 4 | [Código do Apps Script](docs/ETAPA-4-CODIGO.md) | ⏳ Em andamento |
-| 5 | Fontes de ofertas | — |
+| 4 | [Código do Apps Script](docs/ETAPA-4-CODIGO.md) | ✅ Validada (Telegram + demonstração) |
+| 5 | Fontes de ofertas | ⏳ 5.1 diagnóstico |
 | 6 | Filtros inteligentes | — |
 | 7 | Integração com Telegram | — |
 | 8 | Automação (gatilhos) | — |
@@ -31,6 +31,7 @@ Abra a planilha → **Extensões → Apps Script** e crie um arquivo para cada i
 | `Nucleo.gs` | [apps-script/Nucleo.gs](apps-script/Nucleo.gs) |
 | `Telegram.gs` | [apps-script/Telegram.gs](apps-script/Telegram.gs) |
 | `Menu.gs` | [apps-script/Menu.gs](apps-script/Menu.gs) |
+| `Fontes.gs` | [apps-script/Fontes.gs](apps-script/Fontes.gs) |
 
 **Como copiar um arquivo do GitHub:** clique no link → no canto superior direito do código, clique no
 ícone de **copiar** (dois quadradinhos, "Copy raw file") → no Apps Script, apague o conteúdo do arquivo e
@@ -46,5 +47,6 @@ cole com **Ctrl+V** → salve com **Ctrl+S**.
 ```bash
 node testes/teste-setup.cjs    # estrutura da planilha
 node testes/teste-nucleo.cjs   # fluxo completo: classificação, antiduplicidade, Telegram, falhas
+node testes/teste-fontes.cjs   # diagnóstico de fontes
 ```
 Simulam a planilha e o Telegram (não substituem o teste real no Google).

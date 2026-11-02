@@ -10,6 +10,7 @@ function onOpen() {
     .addItem('📨 Testar Telegram', 'menuTestarTelegram')
     .addSeparator()
     .addItem('🧪 Inserir oferta de demonstração', 'menuOfertaDemonstracao')
+    .addItem('🩺 Diagnosticar fontes', 'diagnosticarFontes')
     .addItem('🧱 Criar/verificar estrutura', 'criarEstrutura')
     .addToUi();
 }

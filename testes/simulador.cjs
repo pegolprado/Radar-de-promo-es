@@ -100,7 +100,7 @@ function carregarProjeto(ss, { arquivos, props = {}, telegram } = {}) {
         chamadas.push({ url, opcoes, corpo: opcoes && opcoes.payload ? JSON.parse(opcoes.payload) : null });
         const r = telegram ? telegram(url, opcoes) : { codigo: 200, corpo: { ok: true, result: { message_id: chamadas.length } } };
         if (r.excecao) throw new Error(r.excecao);
-        return { getResponseCode: () => r.codigo, getContentText: () => JSON.stringify(r.corpo) };
+        return { getResponseCode: () => r.codigo, getContentText: () => (r.corpoTexto !== undefined ? r.corpoTexto : JSON.stringify(r.corpo)) };
       }
     }
   };
