@@ -11,7 +11,7 @@
  */
 
 const RADAR_VERSAO_ESQUEMA = '1.0';
-const RADAR_VERSAO_SETUP = '3'; // aparece no registro para confirmar qual versão do código rodou
+const RADAR_VERSAO_SETUP = '4'; // aparece no registro para confirmar qual versão do código rodou
 const RADAR_FUSO = 'America/Sao_Paulo';
 const RADAR_LINHAS_VALIDACAO = 1000; // até quantas linhas aplicar caixas de seleção e listas
 
@@ -265,7 +265,10 @@ const RADAR_CONFIG_PADRAO = [
   ['ALERTA_FALHA_APOS', 3, 'Depois de quantas falhas seguidas uma fonte gera aviso no Telegram e é pausada.'],
   ['LIMITE_URLFETCH_DIA', 2000, 'Teto próprio de consultas externas por dia (a cota do Google é bem maior).'],
   ['GMAIL_MARCADOR', 'RADAR', 'Marcador do Gmail lido pela fonte GMAIL.'],
-  ['DIAS_MANTER_LOGS', 30, 'Linhas de LOGS mais antigas que isso são apagadas na manutenção.']
+  ['DIAS_MANTER_LOGS', 30, 'Linhas de LOGS mais antigas que isso são apagadas na manutenção.'],
+  ['PROXIMO_ALVO_PCT', 5, 'Sem histórico confiável, preço até este % ACIMA do preço-alvo é classificado como BOA.'],
+  ['HORAS_ENTRE_REGISTROS_HISTORICO', 12, 'Mesmo produto + loja + preço só entra de novo no histórico depois deste intervalo (evita inflar a mediana).'],
+  ['DIAS_COMPARACAO_LOJAS', 7, 'Janela (dias) para comparar o preço com outras lojas do mesmo produto.']
 ];
 
 /* ============================== FUNÇÃO PRINCIPAL ============================== */
