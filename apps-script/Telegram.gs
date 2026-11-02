@@ -22,9 +22,19 @@ function credenciaisTelegram_() {
     throw new Error('TELEGRAM_TOKEN com formato inválido (esperado algo como 123456789:ABC...). Confira se não sobrou espaço ou aspas.');
   }
   if (!/^-?\d+$/.test(chat)) {
-    throw new Error('TELEGRAM_CHAT_ID deve conter apenas números (pode começar com -).');
+    throw new Error('TELEGRAM_CHAT_ID deve conter apenas números (pode começar com -). ' + diagnosticarChatId_(chat, token));
   }
   return { token: token, chat: chat };
+}
+
+/** Explica o que há de errado no CHAT_ID sem mostrar o valor. */
+function diagnosticarChatId_(chat, token) {
+  if (/["'{}]/.test(chat)) return 'O valor tem aspas ou chaves. Copie só o número, sem "chat":{"id": e sem vírgula.';
+  if (/^\d+:/.test(chat)) return 'O valor tem ":" — parece um TOKEN. Os valores de TELEGRAM_TOKEN e TELEGRAM_CHAT_ID podem estar trocados.';
+  if (/^@|^[a-z_][a-z0-9_]*bot$/i.test(chat)) return 'O valor parece um nome de usuário (@...). Use o número do campo "chat":{"id": ...}.';
+  if (/\s/.test(chat)) return 'O valor tem espaço ou quebra de linha no meio. Apague e digite só os números.';
+  if (/[.,]/.test(chat)) return 'O valor tem ponto ou vírgula. Copie só os dígitos.';
+  return 'O valor tem letras ou símbolos. Copie só os dígitos do campo "chat":{"id": ...}.';
 }
 
 /**

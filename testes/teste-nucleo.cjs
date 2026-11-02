@@ -281,4 +281,19 @@ teste('reconhecimento de palavras: "tv" não casa "tvbox"; acentos e maiúsculas
   assert.strictEqual(P.reais_(1234567.5), 'R$ 1.234.567,50');
 });
 
+teste('CHAT_ID inválido: diagnóstico claro sem revelar o valor', () => {
+  const casos = [
+    ['123456789:AAHsegredo', /TOKEN.*trocados/],
+    ['"chat":{"id":987654321,', /aspas ou chaves/],
+    ['987 654 321', /espaço/],
+    ['@meu_radar_bot', /nome de usuário/],
+  ];
+  casos.forEach(([valor, re]) => {
+    const ss = criarPlanilhaFalsa(';');
+    const P = carregarProjeto(ss, { arquivos: ARQUIVOS, props: { TELEGRAM_TOKEN: TOKEN, TELEGRAM_CHAT_ID: valor } });
+    P.criarEstrutura();
+    assert.throws(() => P.testarTelegram(), e => re.test(e.message) && !e.message.includes(valor), valor);
+  });
+});
+
 console.log(`\n${ok} testes passaram.`);
