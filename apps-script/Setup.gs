@@ -315,12 +315,7 @@ function prepararAba_(ss, nomeAba, def, indice) {
   if (linha1Vazia) {
     aba.getRange(1, 1, 1, esperadas.length).setValues([esperadas]);
     aplicarFormatos_(aba, def, 1);
-    if (def.exemplos && aba.getLastRow() <= 1) {
-      aba.getRange(2, 1, def.exemplos.length, esperadas.length).setValues(def.exemplos);
-      acao = nova ? 'criada com ' + def.exemplos.length + ' linhas de exemplo' : 'cabeçalhos e exemplos inseridos';
-    } else {
-      acao = nova ? 'criada' : 'cabeçalhos inseridos';
-    }
+    acao = nova ? 'criada' : 'cabeçalhos inseridos';
   } else {
     const faltando = esperadas.filter(function (n) { return atuais.indexOf(n) === -1; });
     if (faltando.length === 0) {
@@ -334,9 +329,30 @@ function prepararAba_(ss, nomeAba, def, indice) {
     }
   }
 
+  // Exemplos só entram se a aba ainda não tiver NENHUM registro (coluna ID vazia).
+  // Atenção: não dá para usar getLastRow() aqui, porque as caixas de seleção contam como conteúdo.
+  if (def.exemplos && ultimaLinhaComDados_(aba, 1) <= 1) {
+    aba.getRange(2, 1, def.exemplos.length, esperadas.length).setValues(def.exemplos);
+    acao += ' + ' + def.exemplos.length + ' linhas de exemplo inseridas';
+  }
+
   if (def.cor) aba.setTabColor(def.cor);
   aba.setFrozenRows(1);
   return nomeAba + ': ' + acao;
+}
+
+/**
+ * Última linha que tem algo escrito na coluna indicada (1 = A).
+ * Usar no lugar de getLastRow(): caixas de seleção vazias contam como conteúdo para o Google.
+ */
+function ultimaLinhaComDados_(aba, coluna) {
+  const total = aba.getLastRow();
+  if (total < 2) return total;
+  const valores = aba.getRange(1, coluna, total, 1).getValues();
+  for (let i = valores.length - 1; i >= 0; i--) {
+    if (String(valores[i][0]).trim() !== '') return i + 1;
+  }
+  return 0;
 }
 
 /** Aplica cabeçalho, larguras, notas, formatos e validações a partir da coluna "inicio". */

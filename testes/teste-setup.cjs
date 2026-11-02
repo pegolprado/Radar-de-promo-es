@@ -43,7 +43,12 @@ function criarPlanilhaFalsa(sep = ',') {
           clearContent() { delete celulas[`${l},${c}`]; delete aba.formulas[`${l},${c}`]; return r; },
           getValues() { const out = []; for (let i = 0; i < nl; i++) { const linha = []; for (let j = 0; j < nc; j++) { const v = celulas[`${l + i},${c + j}`]; linha.push(v == null ? '' : v); } out.push(linha); } return out; },
           setNote(t) { aba.notas[`${l},${c}`] = t; return r; },
-          setDataValidation(v) { aba.validacoes[`${c}`] = v; return r; },
+          setDataValidation(v) {
+            aba.validacoes[`${c}`] = v;
+            // Como no Google: caixa de seleção faz as células "contarem" como preenchidas (FALSE).
+            if (v.checkbox) for (let i = 0; i < nl; i++) if (celulas[`${l + i},${c}`] == null || celulas[`${l + i},${c}`] === '') celulas[`${l + i},${c}`] = false;
+            return r;
+          },
         };
         ['setFontWeight', 'setFontColor', 'setBackground', 'setWrap', 'setVerticalAlignment', 'setNumberFormat',
           'setHorizontalAlignment', 'setFontSize'].forEach(m => { r[m] = () => r; });
@@ -65,7 +70,7 @@ function criarPlanilhaFalsa(sep = ',') {
 }
 
 function carregar(ss) {
-  const validacao = () => { const b = { requireCheckbox: () => b, requireValueInList: (l) => { b.lista = l; return b; }, setAllowInvalid: () => b, build: () => b }; return b; };
+  const validacao = () => { const b = { requireCheckbox: () => { b.checkbox = true; return b; }, requireValueInList: (l) => { b.lista = l; return b; }, setAllowInvalid: () => b, build: () => b }; return b; };
   const ctx = {
     console: { log: () => {} },
     SpreadsheetApp: { flush: () => {}, getActiveSpreadsheet: () => ss, newDataValidation: validacao, getUi: () => { throw new Error('sem UI'); } },
@@ -77,6 +82,7 @@ function carregar(ss) {
 }
 
 let ok = 0;
+const ultimaComID = (aba) => { let m = 1; for (const k in aba.celulas) { const [l, c] = k.split(',').map(Number); if (c === 1 && aba.celulas[k] !== '' && aba.celulas[k] != null) m = Math.max(m, l); } return m; };
 function teste(nome, fn) { fn(); ok++; console.log('✔ ' + nome); }
 
 const ss = criarPlanilhaFalsa();
@@ -99,10 +105,10 @@ teste('cabeçalhos iguais ao esquema em todas as abas de dados', () => {
 });
 
 teste('exemplos: 10 produtos, 6 lojas, 5 fontes; nenhuma fonte começa como OK', () => {
-  assert.strictEqual(ss.getSheetByName('PRODUTOS').getLastRow(), 11);
-  assert.strictEqual(ss.getSheetByName('LOJAS').getLastRow(), 7);
+  assert.strictEqual(ultimaComID(ss.getSheetByName('PRODUTOS')), 11);
+  assert.strictEqual(ultimaComID(ss.getSheetByName('LOJAS')), 7);
   const f = ss.getSheetByName('FONTES');
-  assert.strictEqual(f.getLastRow(), 6);
+  assert.strictEqual(ultimaComID(f), 6);
   const status = f.getRange(2, 8, 5, 1).getValues().map(l => l[0]);
   assert.ok(!status.includes('OK'), 'nenhuma fonte pode nascer OK');
 });
@@ -179,6 +185,27 @@ teste('planilha em português (separador ;) também funciona, sem #ERROR!', () =
   assert.ok(f.endsWith(';1);"Nenhuma oferta excelente ainda")'), f);
   const ativos = Object.values(p.formulas).find(x => x.startsWith('=COUNTIF(PRODUTOS'));
   assert.strictEqual(ativos, '=COUNTIF(PRODUTOS!B2:B;(1=1))');
+});
+
+teste('planilha que ficou sem exemplos (caso real do usuário) recebe os exemplos ao rodar de novo', () => {
+  const ssU = criarPlanilhaFalsa(';');
+  const RU = carregar(ssU);
+  RU.criarEstrutura();
+  // simula o estado do print: cabeçalhos + caixas de seleção, sem nenhum registro
+  for (const nome of ['PRODUTOS', 'LOJAS', 'FONTES']) {
+    const a = ssU.getSheetByName(nome);
+    for (const k of Object.keys(a.celulas)) { if (+k.split(',')[0] > 1 && +k.split(',')[1] !== 2) delete a.celulas[k]; }
+    assert.strictEqual(ultimaComID(a), 1);
+    assert.ok(a.getLastRow() > 900, 'as caixas de seleção devem simular getLastRow alto');
+  }
+  const rel = RU.criarEstrutura();
+  assert.ok(rel.includes('PRODUTOS: já estava correta (nada alterado) + 10 linhas de exemplo inseridas'), rel);
+  assert.strictEqual(ultimaComID(ssU.getSheetByName('PRODUTOS')), 11);
+  assert.strictEqual(ultimaComID(ssU.getSheetByName('LOJAS')), 7);
+  assert.strictEqual(ultimaComID(ssU.getSheetByName('FONTES')), 6);
+  // e não duplica numa terceira execução
+  RU.criarEstrutura();
+  assert.strictEqual(ultimaComID(ssU.getSheetByName('PRODUTOS')), 11);
 });
 
 console.log(`\n${ok} testes passaram.`);

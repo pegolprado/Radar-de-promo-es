@@ -2,7 +2,7 @@
 
 > Status: **aguardando você executar e confirmar**.
 > O script [`apps-script/Setup.gs`](../apps-script/Setup.gs) cria toda a estrutura automaticamente. Ele foi testado aqui com uma
-> planilha simulada (`node testes/teste-setup.cjs`, 9 testes). O teste real é você
+> planilha simulada (`node testes/teste-setup.cjs`, 12 testes). O teste real é você
 > rodá-lo no Google.
 
 ## Passo a passo
@@ -29,9 +29,9 @@
 No Registro de execução:
 ```
 RADAR — estrutura verificada:
-• PRODUTOS: criada com 10 linhas de exemplo
-• LOJAS: criada com 6 linhas de exemplo
-• FONTES: criada com 5 linhas de exemplo
+• PRODUTOS: criada + 10 linhas de exemplo inseridas
+• LOJAS: criada + 6 linhas de exemplo inseridas
+• FONTES: criada + 5 linhas de exemplo inseridas
 • OFERTAS: criada
 • HISTORICO_PRECOS: criada
 • CONFIGURACOES: criada
@@ -68,3 +68,8 @@ Os produtos P004 a P010 vêm **desmarcados** (exemplos). Para usar: preencha o p
 ## Segurança
 - Rodar `criarEstrutura` de novo **não apaga nada**: só recria o que faltar (testado).
 - Token do Telegram **não** vai na planilha. Entra nas Propriedades do Script na Etapa 4.
+
+## Correções feitas durante a validação
+- **Painel com `#ERROR!`**: planilhas em português usam `;` nas fórmulas. O setup agora testa o separador aceito antes de escrever.
+- **Abas sem exemplos**: as caixas de seleção fazem o Google considerar as 1000 linhas como preenchidas, e o
+  setup achava que já havia dados. Agora ele olha a coluna ID. Rodar o setup de novo insere os exemplos que faltaram.
