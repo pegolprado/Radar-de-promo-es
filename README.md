@@ -13,7 +13,7 @@ Roda de graça com **Google Sheets + Google Apps Script + Telegram Bot API**.
 | 2 | [Bot do Telegram](docs/ETAPA-2-TELEGRAM-BOT.md) | ✅ Teste de envio OK |
 | 3 | [Planilha (Google Sheets)](docs/ETAPA-3-PLANILHA.md) | ✅ Validada |
 | 4 | [Código do Apps Script](docs/ETAPA-4-CODIGO.md) | ✅ Validada (Telegram + demonstração) |
-| 5 | Fontes de ofertas | ⏳ 5.1 diagnóstico |
+| 5 | [Fontes de ofertas](docs/ETAPA-5-FONTES.md) | ⏳ 5.2 Google Notícias |
 | 6 | Filtros inteligentes | — |
 | 7 | Integração com Telegram | — |
 | 8 | Automação (gatilhos) | — |
@@ -48,5 +48,6 @@ cole com **Ctrl+V** → salve com **Ctrl+S**.
 node testes/teste-setup.cjs    # estrutura da planilha
 node testes/teste-nucleo.cjs   # fluxo completo: classificação, antiduplicidade, Telegram, falhas
 node testes/teste-fontes.cjs   # diagnóstico de fontes
+node testes/teste-gnews.cjs    # fonte Google Notícias (pistas)
 ```
 Simulam a planilha e o Telegram (não substituem o teste real no Google).

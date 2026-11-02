@@ -119,3 +119,115 @@ function limparTextoXml_(s) {
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
     .replace(/\s+/g, ' ').trim();
 }
+
+/* =====================================================================================
+ * Etapa 5.2 — COLETOR: GOOGLE NOTÍCIAS (fonte GNEWS)
+ * Feed RSS público do Google Notícias (o mesmo aprovado no diagnóstico).
+ * Para cada produto ATIVO, busca notícias recentes com o nome do produto e extrai do TÍTULO:
+ *   preço ("R$ 2.299"), preço anterior ("de R$ X por R$ Y") e a loja citada.
+ * O resultado é uma PISTA: o preço não é verificado na loja e não entra no histórico.
+ * ===================================================================================== */
+
+const GNEWS_MODELO_PADRAO = '"{produto}" (promoção OR oferta OR desconto) when:2d';
+const GNEWS_IDADE_MAXIMA_HORAS = 48;
+
+/** Apelidos usados para reconhecer a loja citada no texto. Chave = ID da aba LOJAS. */
+const RADAR_APELIDOS_LOJAS = {
+  amazon: ['amazon'],
+  mercadolivre: ['mercado livre', 'mercadolivre', 'mercado libre'],
+  magalu: ['magalu', 'magazine luiza'],
+  shopee: ['shopee'],
+  kabum: ['kabum'],
+  casasbahia: ['casas bahia', 'casasbahia']
+};
+
+function coletar_GNEWS(fonte, ctx) {
+  const modelo = fonte.parametro.indexOf('{produto}') !== -1 ? fonte.parametro : GNEWS_MODELO_PADRAO;
+  const produtos = ctx.produtos.filter(function (p) { return p.ativo && p.obrigatorias.length; });
+  const itens = [];
+  let lidas = 0, semPreco = 0, antigas = 0;
+
+  produtos.forEach(function (p, i) {
+    if (i > 0) Utilities.sleep(400);
+    const consulta = modelo.split('{produto}').join(p.nome.replace(/"/g, ''));
+    const url = 'https://news.google.com/rss/search?q=' + encodeURIComponent(consulta) + '&hl=pt-BR&gl=BR&ceid=BR:pt-419';
+    const xml = buscarUrl_(ctx, url, 'GNEWS');
+    const entradas = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || [];
+    entradas.forEach(function (bloco) {
+      lidas++;
+      const campo = function (nome) {
+        const m = new RegExp('<' + nome + '[^>]*>([\\s\\S]*?)</' + nome + '>', 'i').exec(bloco);
+        return m ? limparTextoXml_(m[1]) : '';
+      };
+      let titulo = campo('title');
+      const origem = campo('source');
+      // O Google acrescenta " - Nome do site" no fim do título.
+      if (origem && titulo.slice(-(origem.length + 3)) === ' - ' + origem) titulo = titulo.slice(0, -(origem.length + 3));
+      const publicado = new Date(campo('pubDate'));
+      if (!isNaN(publicado.getTime()) && ctx.agora - publicado > GNEWS_IDADE_MAXIMA_HORAS * 3600000) { antigas++; return; }
+
+      const precos = extrairPrecos_(titulo);
+      if (!precos) { semPreco++; return; }
+      itens.push({
+        titulo: titulo,
+        preco: precos.preco,
+        precoAnunciado: precos.anterior || '',
+        loja: lojaNoTexto_(ctx, titulo) || '',
+        link: campo('link'),
+        publicadoEm: isNaN(publicado.getTime()) ? null : publicado,
+        origemTexto: origem
+      });
+    });
+  });
+
+  log_(ctx, 'INFO', 'fonte:GNEWS', produtos.length + ' produto(s) pesquisado(s): ' + lidas + ' notícia(s), ' +
+    itens.length + ' com preço no título, ' + semPreco + ' sem preço, ' + antigas + ' antiga(s).', '');
+  return itens;
+}
+
+/**
+ * Lê preços de um texto. "de R$ 3.499 por R$ 2.699" → {preco: 2699, anterior: 3499}.
+ * Vários preços soltos → o menor (com "a partir de" é o mais comum em manchetes). Nenhum → null.
+ */
+function extrairPrecos_(texto) {
+  const t = String(texto || '');
+  const deP = /\bde\s+R\$\s*([\d.]+(?:,\d{1,2})?)\s+(?:por|para)\s+(?:apenas\s+|só\s+)?R\$\s*([\d.]+(?:,\d{1,2})?)/i.exec(t);
+  if (deP) {
+    const anterior = parseNumero_(deP[1]), preco = parseNumero_(deP[2]);
+    if (preco > 0) return { preco: preco, anterior: anterior > preco ? anterior : null };
+  }
+  const todos = [];
+  const re = /R\$\s*([\d.]+(?:,\d{1,2})?)/gi;
+  let m;
+  while ((m = re.exec(t)) !== null) { const n = parseNumero_(m[1]); if (n > 0) todos.push(n); }
+  if (!todos.length) return null;
+  return { preco: Math.min.apply(null, todos), anterior: null };
+}
+
+/** ID da loja citada no texto. Se citar mais de uma, não arrisca: devolve ''. */
+function lojaNoTexto_(ctx, texto) {
+  const t = normalizar_(texto);
+  const achadas = Object.keys(ctx.lojas).filter(function (id) {
+    const apelidos = (RADAR_APELIDOS_LOJAS[id] || []).concat([normalizar_(ctx.lojas[id].nome)]);
+    return apelidos.some(function (a) { return a && contemTermo_(t, a); });
+  });
+  return achadas.length === 1 ? achadas[0] : '';
+}
+
+/**
+ * Consulta uma URL respeitando o teto diário (LIMITE_URLFETCH_DIA). Lança erro se não for HTTP 200,
+ * para a fonte ser marcada como FALHANDO (e pausada após falhas seguidas).
+ */
+function buscarUrl_(ctx, url, rotulo) {
+  const props = PropertiesService.getScriptProperties();
+  const chave = 'URLFETCH_' + Utilities.formatDate(new Date(), RADAR_FUSO, 'yyyyMMdd');
+  const usadas = Number(props.getProperty(chave) || 0);
+  if (usadas >= ctx.cfg.num('LIMITE_URLFETCH_DIA')) {
+    throw new Error('Teto diário de consultas atingido (LIMITE_URLFETCH_DIA = ' + ctx.cfg.num('LIMITE_URLFETCH_DIA') + ').');
+  }
+  props.setProperty(chave, String(usadas + 1));
+  const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+  const codigo = r.getResponseCode();
+  if (codigo !== 200) throw new Error((rotulo || 'consulta') + ': HTTP ' + codigo);
+  return String(r.getContentText() || '');
+}

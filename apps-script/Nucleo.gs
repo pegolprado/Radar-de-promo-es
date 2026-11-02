@@ -9,7 +9,18 @@
  * Depende de Setup.gs (esquema e configurações padrão) e Telegram.gs (envio).
  */
 
-const RADAR_VERSAO_NUCLEO = '1';
+const RADAR_VERSAO_NUCLEO = '2';
+
+/**
+ * Fontes de PISTAS: o preço vem de um texto de terceiros (ex.: notícia), não da loja.
+ * Pistas podem gerar alerta, mas NUNCA entram no histórico de preços e a mensagem avisa que não foram verificadas.
+ * O link aponta para o domínio da própria fonte (aceito só para ela); a loja é identificada pelo texto.
+ */
+const RADAR_FONTES_PISTA = {
+  GNEWS: { dominios: ['news.google.com'], rotulo: 'notícia' }
+};
+
+function ehPista_(fonteId) { return Object.prototype.hasOwnProperty.call(RADAR_FONTES_PISTA, String(fonteId || '')); }
 
 /* =============================== EXECUÇÃO PRINCIPAL =============================== */
 
@@ -124,9 +135,10 @@ function carregarContexto_(ctx) {
 
   // Alertas já enviados (para antiduplicidade e limite diário)
   ctx.alertasEnviados = ctx.tabNotificacoes.linhas
-    .filter(function (l) { return l.get('Tipo') === 'ALERTA' && l.get('Status') === 'ENVIADO'; })
+    .filter(function (l) { return (l.get('Tipo') === 'ALERTA' || l.get('Tipo') === 'PISTA') && l.get('Status') === 'ENVIADO'; })
     .map(function (l) {
       return {
+        pista: l.get('Tipo') === 'PISTA',
         data: comoData_(l.get('Data/hora')), produtoId: String(l.get('ID do produto')).trim(),
         loja: String(l.get('Loja')).trim().toLowerCase(), preco: parseNumero_(l.get('Preço (R$)'))
       };
@@ -215,15 +227,18 @@ function atualizarStatusFonte_(ctx, id, ok, mensagem, itens, statusForcado) {
 function atualizarStatusLojas_(ctx) {
   Object.keys(ctx.lojas).forEach(function (id) {
     const loja = ctx.lojas[id];
-    const cobrindo = ctx.tabFontes.linhas.filter(function (l) {
+    const fontesAtivas = ctx.tabFontes.linhas.filter(function (l) {
       const fid = String(l.get('ID')).trim();
       if (!fid || fid === 'MANUAL' || !verdadeiro_(l.get('Ativa')) || l.get('Status') !== 'OK') return false;
       const lojas = listaIds_(l.get('Lojas'));
       return lojas.length === 0 || lojas.indexOf('todas') !== -1 || lojas.indexOf(id) !== -1;
     }).map(function (l) { return String(l.get('ID')).trim(); });
+    const cobrindo = fontesAtivas.filter(function (f) { return !ehPista_(f); });
+    const pistas = fontesAtivas.filter(ehPista_);
     let status;
     if (!loja.ativa) status = 'DESATIVADA';
-    else if (cobrindo.length) status = 'MONITORADA (' + cobrindo.join(', ') + ')';
+    else if (cobrindo.length) status = 'MONITORADA (' + cobrindo.join(', ') + ')' + (pistas.length ? ' + PISTAS (' + pistas.join(', ') + ')' : '');
+    else if (pistas.length) status = 'SÓ PISTAS (' + pistas.join(', ') + ') + MANUAL';
     else status = 'SÓ MANUAL';
     if (loja.linha.get('Status') !== status) {
       loja.linha.set('Status', status);
@@ -277,7 +292,8 @@ function processarOfertasNovas_(ctx, novas, resumo) {
       titulo: String(bruta.titulo || '').trim(), preco: parseNumero_(bruta.preco),
       precoAnunciado: parseNumero_(bruta.precoAnunciado), frete: String(bruta.frete || '').trim(),
       cupom: String(bruta.cupom || '').trim(), vendedor: String(bruta.vendedor || '').trim(),
-      disponivel: bruta.disponivel, link: String(bruta.link || '').trim()
+      disponivel: bruta.disponivel, link: String(bruta.link || '').trim(),
+      publicadoEm: comoData_(bruta.publicadoEm), origemTexto: String(bruta.origemTexto || '').trim()
     };
     const res = classificarOferta_(ctx, oferta, {});
     // Também vale para descartadas (ex.: anúncio que não é de nenhum produto): não regrava a cada execução.
@@ -340,7 +356,11 @@ function classificarOferta_(ctx, of, opcoes) {
   const host = hostDe_(of.link);
   if (!host) return descartar('Link inválido: precisa começar com https:// e ter um domínio.');
   const lojaDoLink = lojaPorHost_(ctx, host);
-  if (of.loja) {
+  const pista = ehPista_(of.fonte) ? RADAR_FONTES_PISTA[of.fonte] : null;
+  if (pista && pista.dominios.some(function (d) { return host === d || host.slice(-(d.length + 1)) === '.' + d; })) {
+    res.loja = ctx.lojas[of.loja] || null;
+    if (!res.loja) return descartar('A ' + pista.rotulo + ' não cita uma loja cadastrada (Amazon, Mercado Livre, Magalu, Shopee, KaBuM!, Casas Bahia).');
+  } else if (of.loja) {
     res.loja = ctx.lojas[of.loja] || null;
     if (!res.loja) return descartar('Loja "' + of.loja + '" não existe na aba LOJAS.');
     if (!lojaDoLink || lojaDoLink.id !== res.loja.id) return descartar('O link (' + host + ') não pertence aos domínios oficiais de ' + res.loja.nome + '.');
@@ -445,6 +465,9 @@ function classificarOferta_(ctx, of, opcoes) {
     }
   }
 
+  if (ehPista_(of.fonte)) {
+    notas.unshift('Pista: preço citado em ' + RADAR_FONTES_PISTA[of.fonte].rotulo + (of.origemTexto ? ' (' + of.origemTexto + ')' : '') + ', não verificado na loja');
+  }
   res.motivo = notas.join('; ') + '.';
   res.motivo = res.motivo.charAt(0).toUpperCase() + res.motivo.slice(1);
   ctx.produtosTocados[p.id] = true;
@@ -509,7 +532,11 @@ function notificarSeNecessario_(ctx, of, res, resumo) {
   const janela = cfg.num('JANELA_DUPLICIDADE_HORAS') * 3600000;
   const queda = cfg.num('QUEDA_EXTRA_REALERTA_PCT');
   const anterior = ctx.alertasEnviados
-    .filter(function (a) { return a.produtoId === res.produto.id && a.loja === res.loja.id && ctx.agora - a.data <= janela; })
+    .filter(function (a) {
+      // Um alerta verificado (loja) não é bloqueado por uma pista (notícia) anterior.
+      if (a.pista && !ehPista_(of.fonte)) return false;
+      return a.produtoId === res.produto.id && a.loja === res.loja.id && ctx.agora - a.data <= janela;
+    })
     .sort(function (a, b) { return b.data - a.data; })[0];
   if (anterior && of.fonte !== 'DEMO' && !(of.preco <= anterior.preco * (1 - queda / 100))) {
     return 'NÃO — já avisado em ' + dataHora_(anterior.data) + ' por ' + reais_(anterior.preco);
@@ -530,12 +557,12 @@ function enviarAlertaOferta_(ctx, of, res, resumo) {
   try { r = enviarTelegram_(texto); } catch (e) { r = { ok: false, tentativas: 0, resposta: mensagemErro_(e) }; }
   const demo = of.fonte === 'DEMO';
   registrarNotificacao_(ctx, {
-    tipo: demo ? 'TESTE' : 'ALERTA', produtoId: res.produto.id, produto: res.produto.nome, loja: res.loja.id, preco: of.preco,
+    tipo: demo ? 'TESTE' : (ehPista_(of.fonte) ? 'PISTA' : 'ALERTA'), produtoId: res.produto.id, produto: res.produto.nome, loja: res.loja.id, preco: of.preco,
     classe: res.classe, chave: res.chave, ok: r.ok, tentativas: r.tentativas, resposta: r.resposta, idMensagem: r.id
   });
   if (r.ok) {
     resumo.enviadas++;
-    if (!demo) ctx.alertasEnviados.push({ data: ctx.agora, produtoId: res.produto.id, loja: res.loja.id, preco: of.preco });
+    if (!demo) ctx.alertasEnviados.push({ pista: ehPista_(of.fonte), data: ctx.agora, produtoId: res.produto.id, loja: res.loja.id, preco: of.preco });
     return 'SIM — ' + dataHora_(ctx.agora);
   }
   resumo.falhasEnvio++;
@@ -573,11 +600,18 @@ function montarMensagemOferta_(ctx, of, res) {
   const linhas = [];
   if (of.fonte === 'DEMO') linhas.push('🧪 <i>[DEMONSTRAÇÃO — oferta fictícia, não compre]</i>');
   else if (ctx.cfg.sim('MODO_TESTE')) linhas.push('🧪 <i>[TESTE]</i>');
-  linhas.push(res.classe === 'EXCELENTE' ? '🚨 <b>PROMOÇÃO EXCELENTE ENCONTRADA!</b>' : '👍 <b>PROMOÇÃO BOA ENCONTRADA</b>');
+  const pista = ehPista_(of.fonte) ? RADAR_FONTES_PISTA[of.fonte] : null;
+  if (pista) {
+    linhas.push('📰 <b>PISTA DE PROMOÇÃO (' + res.classe + ')</b>');
+    linhas.push('⚠️ <i>Preço citado em ' + pista.rotulo + (of.origemTexto ? ' (' + escaparHtml_(of.origemTexto) + ')' : '') +
+      ', não verificado na loja. Confira antes de comprar.</i>');
+  } else {
+    linhas.push(res.classe === 'EXCELENTE' ? '🚨 <b>PROMOÇÃO EXCELENTE ENCONTRADA!</b>' : '👍 <b>PROMOÇÃO BOA ENCONTRADA</b>');
+  }
   linhas.push('');
   linhas.push('📦 <b>Produto:</b> ' + escaparHtml_(p.nome));
-  if (of.titulo && normalizar_(of.titulo) !== normalizar_(p.nome)) linhas.push('📝 <b>Anúncio:</b> ' + escaparHtml_(of.titulo.slice(0, 160)));
-  linhas.push('💰 <b>Preço atual:</b> ' + reais_(of.preco));
+  if (of.titulo && normalizar_(of.titulo) !== normalizar_(p.nome)) linhas.push('📝 <b>' + (pista ? 'Manchete' : 'Anúncio') + ':</b> ' + escaparHtml_(of.titulo.slice(0, 160)));
+  linhas.push('💰 <b>' + (pista ? 'Preço citado' : 'Preço atual') + ':</b> ' + reais_(of.preco));
   if (p.alvo > 0) linhas.push('🎯 <b>Seu preço-alvo:</b> ' + reais_(p.alvo) + (of.preco <= p.alvo ? ' ✅ atingido' : ''));
   if (res.mediana) {
     linhas.push('📉 <b>Preço de referência:</b> ' + reais_(res.mediana) + ' <i>(mediana de ' + res.nObs + ' preços registrados pelo radar)</i>');
@@ -595,7 +629,8 @@ function montarMensagemOferta_(ctx, of, res) {
   linhas.push('⭐ <b>Classificação:</b> ' + res.classe);
   linhas.push('🧠 <b>Por quê:</b> ' + escaparHtml_(res.motivo));
   linhas.push('');
-  linhas.push('🔗 <a href="' + escaparHtml_(of.link) + '"><b>LINK PARA COMPRA</b></a>');
+  linhas.push('🔗 <a href="' + escaparHtml_(of.link) + '"><b>' + (pista ? 'LER A ' + pista.rotulo.toUpperCase() : 'LINK PARA COMPRA') + '</b></a>');
+  if (of.publicadoEm) linhas.push('🗞️ <b>Publicada em:</b> ' + dataHora_(of.publicadoEm));
   linhas.push('⏰ <b>Verificado em:</b> ' + dataHora_(of.data || ctx.agora));
   linhas.push('📥 <b>Fonte:</b> ' + escaparHtml_(of.fonte || ''));
   return linhas.join('\n');
@@ -642,7 +677,8 @@ function registrarNotificacao_(ctx, n) {
 /* =============================== HISTÓRICO E PRODUTOS =============================== */
 
 function registrarNoHistorico_(ctx, of, res) {
-  if (!res.valida || of.fonte === 'DEMO') return; // demonstração nunca vira histórico
+  // Demonstração e pistas (preço de terceiros) nunca viram histórico: só preço visto na loja conta.
+  if (!res.valida || of.fonte === 'DEMO' || ehPista_(of.fonte)) return;
   const pid = res.produto.id, loja = res.loja.id;
   const intervalo = ctx.cfg.num('HORAS_ENTRE_REGISTROS_HISTORICO') * 3600000;
   const lista = ctx.historico[pid] = ctx.historico[pid] || [];

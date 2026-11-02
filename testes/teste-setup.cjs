@@ -104,12 +104,12 @@ teste('cabeçalhos iguais ao esquema em todas as abas de dados', () => {
   }
 });
 
-teste('exemplos: 10 produtos, 6 lojas, 5 fontes; nenhuma fonte começa como OK', () => {
+teste('exemplos: 10 produtos, 6 lojas, 6 fontes; nenhuma fonte começa como OK', () => {
   assert.strictEqual(ultimaComID(ss.getSheetByName('PRODUTOS')), 11);
   assert.strictEqual(ultimaComID(ss.getSheetByName('LOJAS')), 7);
   const f = ss.getSheetByName('FONTES');
-  assert.strictEqual(ultimaComID(f), 6);
-  const status = f.getRange(2, 8, 5, 1).getValues().map(l => l[0]);
+  assert.strictEqual(ultimaComID(f), 7);
+  const status = f.getRange(2, 8, 6, 1).getValues().map(l => l[0]);
   assert.ok(!status.includes('OK'), 'nenhuma fonte pode nascer OK');
 });
 
@@ -202,7 +202,7 @@ teste('planilha que ficou sem exemplos (caso real do usuário) recebe os exemplo
   assert.ok(rel.includes('PRODUTOS: já estava correta (nada alterado) + 10 linhas de exemplo inseridas'), rel);
   assert.strictEqual(ultimaComID(ssU.getSheetByName('PRODUTOS')), 11);
   assert.strictEqual(ultimaComID(ssU.getSheetByName('LOJAS')), 7);
-  assert.strictEqual(ultimaComID(ssU.getSheetByName('FONTES')), 6);
+  assert.strictEqual(ultimaComID(ssU.getSheetByName('FONTES')), 7);
   // e não duplica numa terceira execução
   RU.criarEstrutura();
   assert.strictEqual(ultimaComID(ssU.getSheetByName('PRODUTOS')), 11);

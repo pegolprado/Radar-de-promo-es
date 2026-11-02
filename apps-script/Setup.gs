@@ -11,7 +11,7 @@
  */
 
 const RADAR_VERSAO_ESQUEMA = '1.0';
-const RADAR_VERSAO_SETUP = '4'; // aparece no registro para confirmar qual versão do código rodou
+const RADAR_VERSAO_SETUP = '5'; // aparece no registro para confirmar qual versão do código rodou
 const RADAR_FUSO = 'America/Sao_Paulo';
 const RADAR_LINHAS_VALIDACAO = 1000; // até quantas linhas aplicar caixas de seleção e listas
 
@@ -157,8 +157,13 @@ const RADAR_ESQUEMA = {
       ['ML_ITENS', false, 'Mercado Livre (anúncio por ID)', 'API', 'mercadolivre', 'https://api.mercadolibre.com/items/{ID}', 120,
         'NÃO TESTADA', '', '', 0, 'Busca pública retorna 403 desde 2026 (relatos). Consulta por ID será testada na Etapa 5.', ''],
       ['PAGINA', false, 'Página do produto (experimental)', 'PAGINA', 'kabum, magalu, casasbahia', 'Links da aba PRODUTOS', 360,
-        'DESLIGADA', '', '', 0, 'Opcional. Só ligar com sua autorização. Respeita robots.txt e se desliga se a loja bloquear.', '']
-    ]
+        'DESLIGADA', '', '', 0, 'Opcional. Só ligar com sua autorização. Respeita robots.txt e se desliga se a loja bloquear.', ''],
+      ['GNEWS', true, 'Google Notícias (pistas por produto)', 'RSS', 'todas',
+        '"{produto}" (promoção OR oferta OR desconto) when:2d', 120,
+        'NÃO TESTADA', '', '', 0, 'Notícias das últimas 48 h com o nome de cada produto ativo. Preço citado em notícia NÃO é verificado na loja.', '']
+    ],
+    // Fontes novas do sistema são acrescentadas mesmo em planilhas que já existem (sem mexer nas suas).
+    garantirIds: true
   },
 
   OFERTAS: {
@@ -216,7 +221,7 @@ const RADAR_ESQUEMA = {
     cor: '#d93025',
     colunas: [
       { nome: 'Data/hora', largura: 130, tipo: 'data' },
-      { nome: 'Tipo', largura: 90, nota: 'ALERTA / RESUMO / FALHA / TESTE' },
+      { nome: 'Tipo', largura: 90, nota: 'ALERTA (preço da loja) / PISTA (preço citado em notícia) / RESUMO / FALHA / TESTE' },
       { nome: 'ID do produto', largura: 90 },
       { nome: 'Produto', largura: 200 },
       { nome: 'Loja', largura: 110 },
@@ -338,6 +343,14 @@ function prepararAba_(ss, nomeAba, def, indice) {
   if (def.exemplos && ultimaLinhaComDados_(aba, 1) <= 1) {
     aba.getRange(2, 1, def.exemplos.length, esperadas.length).setValues(def.exemplos);
     acao += ' + ' + def.exemplos.length + ' linhas de exemplo inseridas';
+  } else if (def.exemplos && def.garantirIds) {
+    const ultima = ultimaLinhaComDados_(aba, 1);
+    const ids = aba.getRange(1, 1, ultima, 1).getValues().map(function (l) { return String(l[0]).trim(); });
+    const faltam = def.exemplos.filter(function (ex) { return ids.indexOf(ex[0]) === -1; });
+    if (faltam.length) {
+      aba.getRange(ultima + 1, 1, faltam.length, esperadas.length).setValues(faltam);
+      acao += ' + nova(s): ' + faltam.map(function (ex) { return ex[0]; }).join(', ');
+    }
   }
 
   if (def.cor) aba.setTabColor(def.cor);
